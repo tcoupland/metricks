@@ -1,4 +1,4 @@
-(defproject metricks "0.1.1-SNAPSHOT"
+(defproject org.clojars.mantree/metricks "0.1.1"
   :description "Wrapper for yammer metrics project that creates metrics based on function meta data."
   :url "https://github.com/mantree/metricks"
   :license {:name "Eclipse Public License"
