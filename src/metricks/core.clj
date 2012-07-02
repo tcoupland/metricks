@@ -5,16 +5,9 @@
   (:import java.util.concurrent.TimeUnit)
   (:use [clojure.string :only (split)]))
 
-  (def metric-name-spec ["info" :name-space :func-name])
-
 (defmulti new-metric-name (fn [list] (count list)))
 (defmethod new-metric-name 3 [list]
   (new MetricName (nth list 0) (nth list 1) (nth list 2)))
-
-(defn transform-metric [map-entry]
-  (let [name (key map-entry) timer (val map-entry)]
-    {:name (apply str (interpose "." [(.getGroup name) (.getType name) (.getName name)]))
-     :count (.count timer)}))
 
 (defn ns-name-str [func-meta] (str (ns-name (:ns func-meta))))
 (defn ns-name-drop-first [func-meta]
@@ -28,17 +21,32 @@
     (identical? :func-name spec) (str (:name func-meta))
     :else (str spec)))
 
-(defn map-metadata-to-name-spec
-  ( [func-meta] (map-metadata-to-name-spec func-meta metric-name-spec))
-  ( [func-meta name-spec] (map (partial map-element func-meta) name-spec)))
+(defn map-metadata-to-name-spec [func-meta name-spec]
+  (map
+   (partial map-element func-meta)
+   name-spec))
 
-(defn get-timer [func-meta]
-  (let [metric-name (new-metric-name (map-metadata-to-name-spec func-meta))]
-    (Metrics/newTimer metric-name TimeUnit/MILLISECONDS TimeUnit/SECONDS)))
+(def metricks-config
+  (atom
+   {:spec ["info" :name-space :func-name]
+    :spec-mapper map-metadata-to-name-spec}))
+
+(defn update-spec [new-spec]
+  (swap! metricks-config assoc :spec new-spec))
+
+(defn transform-metric [name metric]
+  {:name (apply str (interpose "." [(.getGroup name) (.getType name) (.getName name)]))
+   :count (.count metric)})
 
 (defn get-metrics []
   (let [raw-metrics (.allMetrics (Metrics/defaultRegistry))]
-    (map transform-metric raw-metrics)))
+    (map #(transform-metric (key %) (val %)) raw-metrics)))
+
+(defn get-timer [func-meta]
+  (let [metadata-mapper (:spec-mapper @metricks-config)
+        name-spec (:spec @metricks-config)
+        metric-name (new-metric-name (metadata-mapper func-meta name-spec))]
+    (Metrics/newTimer metric-name TimeUnit/MILLISECONDS TimeUnit/SECONDS)))
 
 (defmacro timer [expr]
   `(let [~'func-meta (meta (var ~@expr))
