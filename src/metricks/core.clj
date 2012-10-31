@@ -48,10 +48,21 @@
         metric-name (new-metric-name (metadata-mapper func-meta name-spec))]
     (Metrics/newTimer metric-name TimeUnit/MILLISECONDS TimeUnit/SECONDS)))
 
-(defmacro timer [expr]
-  `(let [~'func-meta (meta (var ~@expr))
-         ~'m (get-timer ~'func-meta)
-         ~'start (. System currentTimeMillis)]
-     (try
-       (~@expr)
-       (finally (.update ~'m (- (. System currentTimeMillis) ~'start) TimeUnit/MILLISECONDS)))))
+
+(defn- wrap-timer [meta-func func]
+  (let [m (get-timer meta-func)]
+    (fn [& args]
+      (let [start (. System currentTimeMillis)]
+        (try
+          (apply func args)
+          (finally (.update m (- (. System currentTimeMillis) start) TimeUnit/MILLISECONDS)))))))
+
+(defn- apply-metricks-to-func [func]
+  (let [wrap-with-meta (partial wrap-timer (meta func))]
+    (alter-var-root func wrap-with-meta)))
+
+(defn apply-metricks [name-space]
+  (doall
+   (map
+    apply-metricks-to-func
+    (vals (ns-publics name-space)))))
