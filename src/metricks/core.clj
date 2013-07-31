@@ -48,7 +48,6 @@
         metric-name (new-metric-name (metadata-mapper func-meta name-spec))]
     (Metrics/newTimer metric-name TimeUnit/MILLISECONDS TimeUnit/SECONDS)))
 
-
 (defn- wrap-timer [meta-func func]
   (let [m (get-timer meta-func)]
     (fn [& args]
@@ -57,9 +56,15 @@
           (apply func args)
           (finally (.update m (- (. System currentTimeMillis) start) TimeUnit/MILLISECONDS)))))))
 
+(def meta-key-to-wrapper
+  {:timer wrap-timer})
+
 (defn- apply-metricks-to-func [func]
-  (let [wrap-with-meta (partial wrap-timer (meta func))]
-    (alter-var-root func wrap-with-meta)))
+  (let [func-ks (set (keys (meta func)))]
+    (doall
+     (for [k (keys meta-key-to-wrapper)
+           :when (contains? func-ks k)]
+       (alter-var-root func (partial (k meta-key-to-wrapper) (meta func)))))))
 
 (defn apply-metricks [name-space]
   (doall
