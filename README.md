@@ -4,11 +4,15 @@ Clojure wrapper for the excellant codahale metrics library (https://github.com/c
 
 Metric names are created according to a customisable metric-name-spec. This specification vector describes which parts of a methods meta data should be used to build a name.
 
-This allows metrics to be recorded for a function simply by wrapping it with a call to the desired metric:
+In short it takes two steps to get this working:
 
-(timer (your-function))
+First you have to register the namespaces you want to use metrics in:
 
-This is still very much a proof of concept and only Timer's are supported so far. However the next step will be to add a way you can get a grip on your metrics and also to support posting recorded metrics to a graphite instance for graphing. Extra metrics will get added either as i need them or they are requested.
+(apply-metricks 'my.namespace)
+
+Then you simply add metadata to the functions you want metrics for:
+
+(defn ^:timer foo [] "bar")
 
 Enjoy!
 
@@ -16,22 +20,26 @@ Enjoy!
 
 Add metricks to your project.clj
 
-[org.clojars.mantree/metricks "0.1.6"]
+[org.clojars.mantree/metricks "0.1.9"]
 
-Then add a :use to your name space
+Bring in the apply-metricks function to your setup namespace
 
-(:require [metricks.core :as mc])
+(:require [metricks.core :refer [apply-metricks])
 
-Now you can decorate your function calls to generate metrics for them
+Tell metricks about teh namespaces you want to monitor
 
-(mc/timer (your-func args))
+(apply-metricks 'my.namespace 'my.othernamespace)
+
+Now you can add meta data to your functions to time them
+
+(defn ^:timer foo [] "bar")
+
+Or you can gauge your atoms:
+
+(def ^:gauge fizz (atom "buzz"))
 
 This will use the default name specification:
 
 ["info" :name-space :func-name]
 
-So if you wrapped a call to println like so:
-
-(mc/timer (println "Hello Metricks!"))
-
-You'd get a metric called: "info.clojure.core.println"
+So for the examples above, you'd get timer metric called "info.my.namespace.foo" and a gauge called "info.my.namespace.fizz"
