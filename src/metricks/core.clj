@@ -90,8 +90,9 @@
            :when (contains? func-ks k)]
        (alter-var-root func (partial (k meta-key-to-wrapper) (meta func)))))))
 
-(defn apply-metricks [name-space]
+(defn apply-metricks [& name-spaces]
   (doall
-   (map
-    apply-metricks-to-func
-    (vals (ns-publics name-space)))))
+   (->>
+    (map ns-publics name-spaces)
+    (mapcat vals)
+    (map apply-metricks-to-func))))
