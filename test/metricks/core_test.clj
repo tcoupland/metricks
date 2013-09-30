@@ -64,4 +64,5 @@
           (first (filter #(= "info.metricks.core-test.an-atom" (:name %))
                          (get-metrics)))]
       (is (not (nil? gauge)))
-      (is (= 1 (:value gauge))))))
+      (is (= 1 (:value gauge)))
+      (is (= 1 @an-atom)))))

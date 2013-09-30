@@ -2,6 +2,7 @@
   (:import com.yammer.metrics.Metrics)
   (:import [com.yammer.metrics.core Timer Gauge MetricName])
   (:import java.util.concurrent.TimeUnit)
+  (:import clojure.lang.Atom)
   (:use [clojure.string :only (split)]))
 
 (defmulti new-metric-name (fn [list] (count list)))
@@ -59,7 +60,7 @@
    (create-metric-name func-meta)
    TimeUnit/MILLISECONDS TimeUnit/SECONDS))
 
-(defn- wrap-timer [meta-func func]
+(defn- wrap-func-with-timer [meta-func func]
   (let [m (get-timer meta-func)]
     (fn [& args]
       (let [start (. System currentTimeMillis)]
@@ -67,20 +68,25 @@
           (apply func args)
           (finally (.update m (- (. System currentTimeMillis) start) TimeUnit/MILLISECONDS)))))))
 
+(defn- add-timer
+  [meta-func func]
+  (alter-var-root func (partial wrap-func-with-timer (meta func))))
+
 (defn- atom?
   [ref]
-  (instance? clojure.lang.Atom ref))
+  (instance? Atom ref))
 
 (defn- gauge-value
-  [func-meta atom]
-  (when (atom? atom)
-    (Metrics/newGauge
-     (create-metric-name func-meta)
-     (proxy [Gauge] []
-       (value [] (deref atom))))))
+  [func-meta atom-var]
+  (let [atom (var-get atom-var)]
+    (when (atom? atom)
+      (Metrics/newGauge
+       (create-metric-name func-meta)
+       (proxy [Gauge] []
+         (value [] (deref atom)))))))
 
 (def meta-key-to-wrapper
-  {:timer wrap-timer
+  {:timer add-timer
    :gauge gauge-value})
 
 (defn- apply-metricks-to-func [func]
@@ -88,7 +94,7 @@
     (doall
      (for [k (keys meta-key-to-wrapper)
            :when (contains? func-ks k)]
-       (alter-var-root func (partial (k meta-key-to-wrapper) (meta func)))))))
+       ((k meta-key-to-wrapper) (meta func) func)))))
 
 (defn apply-metricks [& name-spaces]
   (doall
