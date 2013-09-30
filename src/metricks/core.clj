@@ -1,7 +1,6 @@
 (ns metricks.core
-  (:import com.yammer.metrics.core.MetricName)
   (:import com.yammer.metrics.Metrics)
-  (:import com.yammer.metrics.core.Timer)
+  (:import [com.yammer.metrics.core Timer Gauge MetricName])
   (:import java.util.concurrent.TimeUnit)
   (:use [clojure.string :only (split)]))
 
@@ -31,22 +30,34 @@
    {:spec ["info" :name-space :func-name]
     :spec-mapper map-metadata-to-name-spec}))
 
+(defn- create-metric-name
+  [func-meta]
+  (let [config @metricks-config
+        metadata-mapper (:spec-mapper config)
+        name-spec (:spec config)]
+    (new-metric-name (metadata-mapper func-meta name-spec))))
+
 (defn update-spec [new-spec]
   (swap! metricks-config assoc :spec new-spec))
 
-(defn transform-metric [name metric]
-  {:name (apply str (interpose "." [(.getGroup name) (.getType name) (.getName name)]))
+(defmulti transform-metric (fn [name metric] (.getClass metric)))
+(defmethod transform-metric Timer [name metric]
+  {:type :timer
+   :name (apply str (interpose "." [(.getGroup name) (.getType name) (.getName name)]))
    :count (.count metric)})
+(defmethod transform-metric Gauge [name metric]
+  {:type :gauge
+   :name (apply str (interpose "." [(.getGroup name) (.getType name) (.getName name)]))
+   :value (.value metric)})
 
 (defn get-metrics []
   (let [raw-metrics (.allMetrics (Metrics/defaultRegistry))]
     (map #(transform-metric (key %) (val %)) raw-metrics)))
 
 (defn get-timer [func-meta]
-  (let [metadata-mapper (:spec-mapper @metricks-config)
-        name-spec (:spec @metricks-config)
-        metric-name (new-metric-name (metadata-mapper func-meta name-spec))]
-    (Metrics/newTimer metric-name TimeUnit/MILLISECONDS TimeUnit/SECONDS)))
+  (Metrics/newTimer
+   (create-metric-name func-meta)
+   TimeUnit/MILLISECONDS TimeUnit/SECONDS))
 
 (defn- wrap-timer [meta-func func]
   (let [m (get-timer meta-func)]
@@ -56,8 +67,21 @@
           (apply func args)
           (finally (.update m (- (. System currentTimeMillis) start) TimeUnit/MILLISECONDS)))))))
 
+(defn- atom?
+  [ref]
+  (instance? clojure.lang.Atom ref))
+
+(defn- gauge-value
+  [func-meta atom]
+  (when (atom? atom)
+    (Metrics/newGauge
+     (create-metric-name func-meta)
+     (proxy [Gauge] []
+       (value [] (deref atom))))))
+
 (def meta-key-to-wrapper
-  {:timer wrap-timer})
+  {:timer wrap-timer
+   :gauge gauge-value})
 
 (defn- apply-metricks-to-func [func]
   (let [func-ks (set (keys (meta func)))]

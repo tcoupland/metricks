@@ -12,6 +12,10 @@
 (defn ^:timer add-func [val]
   (+ 5 val))
 
+(def ^:gauge not-atom "")
+
+(def ^:gauge an-atom (atom 1))
+
 (defn no-timer [])
 
 (deftest test-spec-mapping
@@ -46,4 +50,13 @@
     (let [no-timer-metric
           (first (filter #(= "info.metricks.core-test.no-timer" (:name %))
                          (get-metrics)))]
-      (is (nil? no-timer-metric)))))
+      (is (nil? no-timer-metric)))
+    (let [no-gauge
+          (first (filter #(= "info.metricks.core-test.not-atom" (:name %))
+                         (get-metrics)))]
+      (is (nil? no-gauge)))
+    (let [gauge
+          (first (filter #(= "info.metricks.core-test.an-atom" (:name %))
+                         (get-metrics)))]
+      (is (not (nil? gauge)))
+      (is (= 1 (:value gauge))))))
